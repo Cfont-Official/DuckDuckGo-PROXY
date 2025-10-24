@@ -1,11 +1,11 @@
 import express from "express";
-import cheerio from "cheerio";
+import { load } from "cheerio"; // ✅ FIXED
 import cors from "cors";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.use(cors()); // allow all origins
+app.use(cors());
 app.use(express.json());
 
 // 🦆 JSON search route
@@ -14,20 +14,19 @@ app.get("/proxy/json", async (req, res) => {
   if (!q) return res.status(400).json({ error: "Missing query" });
 
   try {
-    // Spoof headers so DuckDuckGo accepts it
     const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-      }
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
     });
 
     const html = await response.text();
-    const $ = cheerio.load(html);
-
+    const $ = load(html); // ✅ FIXED
     const results = [];
+
     $(".result__body").each((_, el) => {
       const title = $(el).find(".result__a").text().trim();
       const url = $(el).find(".result__a").attr("href");
