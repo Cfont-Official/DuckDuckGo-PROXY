@@ -1,5 +1,4 @@
 import express from "express";
-import fetch from "node-fetch";
 import cheerio from "cheerio";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
