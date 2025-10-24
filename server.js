@@ -1,68 +1,66 @@
-// server.js
 import express from "express";
+import fetch from "node-fetch";
+import cheerio from "cheerio";
 import cors from "cors";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
-import NodeCache from "node-cache";
-import * as cheerio from "cheerio"; // fixed import for Node 25+
 
 const app = express();
-const cache = new NodeCache({ stdTTL: 600 }); // 10 min cache
-const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 20,
-});
+const PORT = process.env.PORT || 10000;
 
-app.use(cors()); // ✅ allow browser access from anywhere
-app.use(helmet());
-app.use(limiter);
+app.use(cors()); // allow all origins
+app.use(express.json());
 
-// ✅ JSON endpoint
+// 🦆 JSON search route
 app.get("/proxy/json", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: "Missing query" });
 
-  const cached = cache.get(q);
-  if (cached) return res.json(cached);
-
   try {
-    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
-    const response = await fetch(url);
-    const text = await response.text();
-    const $ = cheerio.load(text);
-
-    const results = [];
-    $(".result__title a").each((_, el) => {
-      results.push({
-        title: $(el).text().trim(),
-        url: $(el).attr("href"),
-      });
+    // Spoof headers so DuckDuckGo accepts it
+    const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      }
     });
 
-    const data = { query: q, results };
-    cache.set(q, data);
-    res.json(data);
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    const results = [];
+    $(".result__body").each((_, el) => {
+      const title = $(el).find(".result__a").text().trim();
+      const url = $(el).find(".result__a").attr("href");
+      const snippet = $(el).find(".result__snippet").text().trim();
+      if (title && url) results.push({ title, url, snippet });
+    });
+
+    res.json({ query: q, results });
   } catch (err) {
-    console.error("Fetch error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Proxy error:", err);
+    res.status(500).json({ error: "Failed to fetch from DuckDuckGo", details: err.message });
   }
 });
 
-// ✅ HTML endpoint (raw DDG page)
+// 🧩 Raw HTML endpoint
 app.get("/proxy/html", async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).send("Missing query");
 
   try {
-    const response = await fetch(`https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`);
+    const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      },
+    });
     const html = await response.text();
-    res.send(html);
+    res.type("html").send(html);
   } catch (err) {
-    console.error("HTML fetch error:", err);
-    res.status(500).send("Internal server error");
+    console.error("HTML proxy error:", err);
+    res.status(500).send("Failed to fetch from DuckDuckGo: " + err.message);
   }
 });
 
-// ✅ Start server
-const port = process.env.PORT || 10000;
-app.listen(port, () => console.log(`DuckDuckGo Proxy running on port ${port}`));
+app.listen(PORT, () => console.log(`✅ DuckDuckGo Proxy running on port ${PORT}`));
