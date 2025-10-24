@@ -1,5 +1,5 @@
 import express from "express";
-import cheerio from "cheerio";
+import * as cheerio from "cheerio";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import NodeCache from "node-cache";
